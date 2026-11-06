@@ -357,8 +357,15 @@ public class ApplicationPushBuilder implements PushBuilder {
 
         // Undecoded path - just %nn encoded
         pushTarget.requestURI().setString(pushPath);
-        pushTarget.decodedURI().setString(decode(pushPath,
-                catalinaRequest.getConnector().getURICharset()));
+        // Decoded path - CoyoteAdapter expects the decodedURI of an in-memory
+        // request to have any path parameters removed
+        String decodedPushPath = decode(pushPath,
+                catalinaRequest.getConnector().getURICharset());
+        int semicolon = decodedPushPath.indexOf(';');
+        if (semicolon > 0) {
+            decodedPushPath = decodedPushPath.substring(0, semicolon);
+        }
+        pushTarget.decodedURI().setString(decodedPushPath);
 
         // Query string
         if (pushQueryString == null && queryString != null) {
