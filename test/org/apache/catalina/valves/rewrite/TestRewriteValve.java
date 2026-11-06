@@ -19,7 +19,6 @@ package org.apache.catalina.valves.rewrite;
 import java.io.File;
 import java.io.IOException;
 import java.net.HttpURLConnection;
-import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.EnumSet;
 import java.util.HashMap;
@@ -47,6 +46,7 @@ import org.apache.catalina.startup.TesterServlet;
 import org.apache.catalina.startup.Tomcat;
 import org.apache.catalina.startup.TomcatBaseTest;
 import org.apache.tomcat.util.buf.ByteChunk;
+import org.apache.tomcat.util.buf.UDecoder;
 import org.apache.tomcat.util.descriptor.web.LoginConfig;
 import org.apache.tomcat.util.descriptor.web.SecurityCollection;
 import org.apache.tomcat.util.descriptor.web.SecurityConstraint;
@@ -1248,6 +1248,12 @@ public class TestRewriteValve extends TomcatBaseTest {
 
 
     @Test
+    public void testEncodedUriPlus() throws Exception {
+        doTestRewriteWithEncoding("a+b");
+    }
+
+
+    @Test
     public void testEncodedUriEncodedPercent() throws Exception {
         // %2541 is decoded once by the connector to the literal "%41". It must
         // not be decoded a second time (to "A") by the rewrite processing.
@@ -1276,6 +1282,19 @@ public class TestRewriteValve extends TomcatBaseTest {
          */
         doTestRewriteWithPathInfo("RewriteRule ^/b/(.*)$ /c/$1\n" + "RewriteRule ^/c/secret$ - [F]",
                 "/b/secret", "/b/secret%3Bx", "/c/secret%3bx", "/secret;x");
+    }
+
+
+    @Test
+    public void testPlusDoesNotBypassRule() throws Exception {
+        /*
+         * CVE-2026-59083. The [F] rule protects "/c/secret file". A literal '+'
+         * in the path is not a space. If the rewritten URL were decoded as a
+         * form (URLDecoder), "/c/secret+file", which the [F] rule does not
+         * match, would become "/c/secret file" and be served.
+         */
+        doTestRewriteWithPathInfo("RewriteRule ^/b/(.*)$ /c/$1\n" + "RewriteRule ^/c/secret\\sfile$ - [F]",
+                "/b/secret%20file", "/b/secret+file", "/c/secret+file", "/secret+file");
     }
 
 
@@ -1363,7 +1382,7 @@ public class TestRewriteValve extends TomcatBaseTest {
         String body = res.toString();
         Assert.assertTrue(body, body.contains("REQUEST-URI: /target/" + expectedSegment));
         Assert.assertTrue(body, body.contains("PATH-INFO: /" +
-                URLDecoder.decode(expectedSegment, "UTF-8")));
+                UDecoder.URLDecode(expectedSegment, StandardCharsets.UTF_8)));
         Assert.assertTrue(body, body.contains("REQUEST-QUERY-STRING: " + expectedQueryString));
     }
 }
